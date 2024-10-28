@@ -1,0 +1,226 @@
+---
+title: "Activitat 1"
+author: "Ignasi Elgström Puyuelo"
+date: "2024-10-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#Incloem les llibreries que volem fer servir
+library(kableExtra)
+library(stringr)
+library(dplyr)
+library(VIM)
+#Setejem el directori que volem fer servir de referència per llegir el CSV
+setwd("/Users/ignasi/Desktop/Master/Anàlisi Estadística/Activitat 1")
+```
+
+## Exercici 1
+
+1.1 Primer llegim l'arxiu CSV considerant les seguents variables:
+
+* 'header' es FALSE ja que no volem que la primera fila del arxiu es conisderi el nom de la columna
+* 'stringAsFactors' a TRUE perque volem que transformi les dades al tipus corresponent implicitament
+* 'sep' a ';' indicant el caràcter que separa les variables
+* 'dec' a '.' per indicar quin es el separador decimal
+* 'na.strings' a 'c("")' per indicar quina cadena de caracters tractarem com a NA
+```{r echo=F}
+file <- read.csv("gem01.csv",header = FALSE, stringsAsFactors = TRUE, sep = ";",dec = ".", na.strings=c(""))
+```
+
+1.2 Un cop això, podem mostrar el nom de les variables, així com la seva descripció a partir de les dades originals:
+
+```{r echo=F}
+description <- sapply(file[1,],function(x) str_replace_all(x,'[.]',' ')) #Creem llista de descripcion
+name <- unlist(file[2,]) #Creem llista de noms
+df <- data.frame(Name = name,Description=description)
+rownames(df)<-NULL #Descartem la indexació per defecte
+kbl(df) %>% #Dibixem la taula
+  kable_paper(full_width = F) %>%
+  column_spec(1, bold = T, border_right = T) %>%
+  column_spec(2)%>%
+  scroll_box( height = "350px")
+
+```
+<br>
+1.3 Eliminem la primera fila i renombrem cada identificador quedant-nos una taula com aquesta:
+
+```{r echo=F}
+colnames(file)<-c('Code','Economy','Year','OPP','PC','FAIL','EI','TEA','OWN','EMPL','MOT','FMTEA','FMOD','JOB','INNOV','BSER','STAT','CHOI') #Setejem el nom de les columnes
+file <- file[-c(1,2),] #Eliminem les files que no ens interessen
+file <- type.convert(file, as.is=TRUE) #Tornem a fer que el sistema infereixi nous tipus de dades per columna
+rownames(file) <- NULL #Ens desfem de la indexació automàtica
+head(file,n=5) %>% #Dibuixem la taula
+  kbl() %>%
+  kable_paper("hover")
+```
+## Exercici 2
+
+2.1 Si fem una revisió de tots el llistat de paisos a simple vista podem veure algunes inconsistències:
+```{r echo=F}
+file["Economy"]%>%
+  unique()%>%
+  unlist()%>%
+  cat(sep=", ")
+```
+
+Veiem que hi ha inconsistències, no tots els paisos están seguint el amteix format de majúscules, per tant farem una transformació perque tots els paisos ho siguin.
+```{r echo=F}
+file$Economy <- sapply(file$Economy, str_to_title) #Apliquem els canvis de fer els noms de paisos majúscula.
+```
+Fem després agrupacions, agrupant per l'any màxim registrat (max_year), l'any minim registrat (min_year) i els diferents nombre d'anys registrats (registered_years):
+
+```{r echo=F}
+file_gb <- file %>% 
+  group_by(Economy) %>% #Agrupem per pais
+  summarise(min_year = min(Year),max_year = max(Year), registered_years = n_distinct(Year))
+  #Fem servir funcions agrupadores per deduir les dades
+  
+file_gb %>% #Dibuixem la taula per pantalla
+  mutate(index = row_number()) %>% #Afegim un index a la taula
+  select(index, everything()) %>% #Fiquem l'index el principi
+  kbl() %>%
+  kable_paper(bootstrap_options = "striped", full_width = F)%>%
+  scroll_box( height = "300px")
+
+```
+
+## Exercici 3
+
+3.1 En aquest primer pas, no hem de fer cap cerca de si hi ha valors buits, ja que ho hem explicitat al importar el csv, que els valors buits es consideressin NA. Mostrem, aleshores els valors NA per columna:
+```{r echo=F}
+na_count <- sapply(file, function(x) sum(is.na(x))) #Es conten quants NA hi ha per columna
+
+na_count%>%
+  t()%>% #Transformem les dades per mostrar-les millor
+  as.data.frame()%>%
+  kbl()%>%
+  kable_styling()
+```
+
+També mostrem quins son els rangs de les variables numeriques (maxims i minims) per cada variable:
+```{r echo=F}
+max_val <- sapply(file[,4:ncol(file)], function(x) max(x, na.rm=TRUE))#Calculem els maxim per columna
+min_val <- sapply(file[,4:ncol(file)], function(x) min(x, na.rm=TRUE))#Calculem els mminms per columna
+df_result <- data.frame(Max=max_val, Min=min_val)
+df_result%>%
+  t()%>% #Transformem les dades per mostrar-les millor
+  as.data.frame()%>%
+  kbl()%>%
+  kable_styling()
+```
+
+3.2 Repassem si hi ha variables numeriques invàlides. Només es pot donar el cas de que hi hagi valors invàlids en els casos que hi hagi percerentatges i s'hi ha representat fora dels limits de 0 a 100. Ja que s'hi parla de la proporció de població, mai s'assoliran valors més alts de 100 o mes baixos de 0
+
+```{r echo=F}
+n_end<-ncol(file) #Creem una variable pel nombre de columnes
+cols = file[,4:n_end] #Definim les columnes que volem manipular
+cols[cols < 0 | cols > 100] <- NA #Setejem a NA les columnes que no volem 
+```
+
+Amb això fem que tots el valor siguin NA. Per comprobar que es veritat podem mirar si hi ha algun valor fora d'aquests limits:
+
+```{r echo=F}
+are_out_of_bound <- (cols < 0) | (cols > 100)
+any(are_out_of_bound == TRUE, na.rm = TRUE)
+```
+I veiem que dona FALSE, tal com esperàvem
+
+## Exercici 4
+
+Per poder determinar si hi n'hi ha o no valors atípics, s'analitza a través d'un *box plot* que mostrem a continuació:
+```{r echo=F}
+boxplot(file$TEA, horizontal = TRUE, main="Box plot", xlab="file$TEA")
+```
+
+Veiem que hi ha una quantitat considerable de punts que es mostra per sobre del 1.5 vegades el rang interquartílic. Tots els punts que es mostren indicidualment es poden considerar atípics. Més explícitament, són els seguents punts:
+
+```{r}
+boxplot.stats(file$TEA)$out
+```
+
+Aquests son el punts que es mostren per sobre d'aquest rang i es poden transformar en valor NA a través de la seguent forma:
+
+```{r}
+upper_bound <- boxplot.stats(file$TEA)$stats[5]
+file$TEA[file$TEA > upper_bound] <- NA
+```
+
+## Exercici 5
+
+Fent us del model de *k* veins més propers, podem fer us de la fòrmula
+```{r}
+
+a <- kNN(file,variable="EI",k=5)
+```
+
+## Exercici 6
+
+Per evaluar quina relació tenen les variables OPP, PC, FAIL, EI, TEA, STAT i CHOI, ho podem fer mostrant la correlació entre variables:
+```{r echo=F}
+file_min = file[c("OPP","PC","FAIL","EI","TEA","STAT","CHOI")]%>%
+  na.omit()
+
+cor(file_min,use="complete.obs")%>%
+  kbl()%>%
+  kable_paper("hover")
+```
+
+Seguint aquesta taula de variables, podem determinar que els parells de variables que tenen més correlació entre elles. Aquestes son:
+
+* TEA-EI amb una correlació de 0.7427952	
+* TEA-PC amb una correlació de 0.6762092	
+
+Les variables que menys relacionades són:
+
+* CHOI-FAIL amb una correlació de -0.0055376
+* STAT-FAIL amb una correlació de 0.0179510	
+
+També es pot veure que la variable FAIL es la que menys es relaciona amb les alres variables on la correlació mai supera el valor absolut de 0.1425933
+
+## Exercici 7
+
+Primerament, per poder fer una anàlisi de components principals, el que s'ha d'analitzar és quines són les propietats principals dels nous 7 components resultants:
+```{r echo=F}
+file_min.cov <- prcomp(file_min, center= TRUE, scale.=FALSE)
+summary(file_min.cov)$importance%>%
+  kbl()%>%
+  kable_paper("hover")
+```
+
+Amb aquests resulats, el que es mostra els 7 components principals. Es a dir, es mostren les principals dades de noves variables redefinides per capturar la maxima variabilitat amb el menor nombre de dimensions.
+
+Per calcular quantes dimensions podem fer servir per reduir s'ha de mirar a la *Proportion of Variance* per tal d'obtenir com a minim la meitat de la mitjana de valors propis. La mitjana dels valors propis es:
+```{r echo=F}
+summary(file_min.cov)$importance["Proportion of Variance",]%>%
+  mean()
+```
+
+Aquesta mitjana es menor que el valor de la primera component principal, per tant, es podria reduir a una les dimensions.
+Pero si fem un *plot* d'aquestes variables obtenim:
+
+```{r echo=F}
+summary(file_min.cov)$importance["Proportion of Variance",]%>%
+  plot(type="b",main="Scree Plot", xlab="Nombre de CPs", ylab="Valors Propis")
+```
+
+Entre la primera y la segona component principal veiem que es fa un 'colze', fent que confirmi que es pot fer una reducció a una dimensió.
+
+Si observem quines variables orginals són més rellevants dins d'aquest component, ho podem mirar a traves dels vectors propis resultant, quina combinació són dels vectors originals:
+
+```{r echo=F}
+file_min.cov$rotation[,"PC1"]%>%
+  t()%>%
+  as.data.frame()%>%
+  kbl()%>%
+  kable_styling()
+```
+On veiem que els valors que més son compresos el primer component són OPP,PC, EI i TEA
+
+
+## Exercici 8
+Guardem el resultat en un nou fitxer CSV, a la mateixa ruta que l'arxiu original
+```{r}
+write.csv(file,"gem02.csv")
+```
